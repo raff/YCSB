@@ -48,8 +48,10 @@ public class JCRClient extends DB {
         String database = props.getProperty("jcr.database", "ycsb");
 
 	writeCommit = getBooleanProperty(props, "jcr.writeCommit", true);
+	boolean cleanup = getBooleanProperty(props, "jcr.cleanup", false);
+	boolean verbose = getBooleanProperty(props, "jcr.properties", false);
 
-	if (getBooleanProperty(props, "jcr.properties", false)) {
+	if (verbose) {
 	    System.out.println("");
 	    System.out.println("JCR driver properties:");
 	    System.out.println("  jcr.url:         " + url);
@@ -58,6 +60,7 @@ public class JCRClient extends DB {
 	    System.out.println("  jcr.password:    " + password);
 	    System.out.println("  jcr.database:    " + database);
 	    System.out.println("  jcr.writeCommit: " + writeCommit);
+	    System.out.println("  jcr.cleanup:     " + cleanup);
 	    System.out.println("");
 	}
 
@@ -68,9 +71,17 @@ public class JCRClient extends DB {
 		new SimpleCredentials(username,password.toCharArray()), workspace);
 
 	    Node root = session.getRootNode();
-	    if (root.hasNode(database))
+	    if (root.hasNode(database)) {
 		dbNode = root.getNode(database);
-	    else {
+		if (cleanup) {
+			if (verbose) System.out.println("cleaning database...");
+			dbNode.remove();
+			dbNode = root.addNode(database);
+			if (verbose) System.out.println("saving...");
+			session.save();
+			if (verbose) System.out.println("done.");
+		}
+	    } else {
 		dbNode = root.addNode(database);
 		session.save();
 	    }
