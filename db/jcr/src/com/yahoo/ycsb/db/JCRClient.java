@@ -1,9 +1,7 @@
 /**
  * JCR client binding for YCSB.
  *
- * Submitted by Raffaele Sena on mm/dd/yyyy
- *
- * https://gist.github.com/000a66b8db2caf42467b#file_mongo_db.java
+ * Created by Raffaele Sena on 03/17/2011
  *
  */
 
@@ -23,10 +21,7 @@ import org.apache.jackrabbit.rmi.client.ClientRepositoryFactory;
 /**
 * JCR client for YCSB framework.
 *
-* Properties to set:
-*
-* jcr.url=rmi://localhost:1234/crx (or another valid rmi URL)
-* jcr.database=ycsb
+* add -p jcr.properties=true to the command line to see all available properties
 *
 * @author raff
 *
@@ -46,19 +41,25 @@ public class JCRClient extends DB {
     public void init() throws DBException {
         // initialize JCR driver
         Properties props = getProperties();
-        String url = props.getProperty("jcr.url");
-        String database = props.getProperty("jcr.database");
-        String sWriteCommit = props.getProperty("jcr.writeCommit");
+        String url = props.getProperty("jcr.url", "rmi://localhost:1234/crx");
+        String workspace = props.getProperty("jcr.workspace", "crx.default");
+	String username = props.getProperty("jcr.username", "admin");
+	String password = props.getProperty("jcr.password", "admin");
+        String database = props.getProperty("jcr.database", "ycsb");
 
-	String workspace = "crx.default";
-	String username = "admin";
-	String password = "admin";
+	writeCommit = getBooleanProperty(props, "jcr.writeCommit", true);
 
-        if ("yes".equals(sWriteCommit) || "true".equals(sWriteCommit)) {
-            writeCommit = true;
-        } else {
-            writeCommit = false;
-        }
+	if (getBooleanProperty(props, "jcr.properties", false)) {
+	    System.out.println("");
+	    System.out.println("JCR driver properties:");
+	    System.out.println("  jcr.url:         " + url);
+	    System.out.println("  jcr.workspace:   " + workspace);
+	    System.out.println("  jcr.username:    " + username);
+	    System.out.println("  jcr.password:    " + password);
+	    System.out.println("  jcr.database:    " + database);
+	    System.out.println("  jcr.writeCommit: " + writeCommit);
+	    System.out.println("");
+	}
 
         try {
 	    ClientRepositoryFactory factory = new ClientRepositoryFactory();
@@ -82,7 +83,8 @@ public class JCRClient extends DB {
 			logger.warn("Could not release JCR session", e);
 		}
 	    }
-            
+
+	    e.printStackTrace();
             throw new DBException(e);
         }
     }
@@ -99,8 +101,17 @@ public class JCRClient extends DB {
 
 	   session.logout();
         } catch (Exception e) {
+	    e.printStackTrace();
             throw new DBException(e);
         }
+    }
+
+    public boolean getBooleanProperty(Properties p, String name, boolean defaultValue)
+    {
+	String value = p.getProperty(name);
+	return (value == null)
+		?  defaultValue
+		: value.equals("yes") || value.equals("true") || value.equals("1");
     }
 
     /**
