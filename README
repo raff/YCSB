@@ -44,6 +44,9 @@ doc/index.html file.
 Revision History
 ================
 
+0.1.4 - 03/17/11
+- JCR (jackrabbit or CRX) binding (raff)
+
 0.1.3 - 10/26/10
 
 - Voldemort binding (rsumbaly)

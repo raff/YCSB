@@ -1,0 +1,3 @@
+This directory should contain jars for building and running JCR (Jackrabbit or CRX)
+
+For Jackarabbit the easiest thing to do is probably to use the jackarabbit-standalone.jar. For CRX you'll also need crx-shared.jar in crx-quickstart/server/lib/container.
