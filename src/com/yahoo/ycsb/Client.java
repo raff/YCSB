@@ -22,6 +22,7 @@ import java.io.*;
 import java.text.DecimalFormat;
 import java.util.*;
 
+import com.yahoo.ycsb.Client.Operation;
 import com.yahoo.ycsb.measurements.Measurements;
 import com.yahoo.ycsb.measurements.exporter.MeasurementsExporter;
 import com.yahoo.ycsb.measurements.exporter.TextMeasurementsExporter;
@@ -36,20 +37,26 @@ import com.yahoo.ycsb.measurements.exporter.TextMeasurementsExporter;
  */
 class StatusThread extends Thread
 {
+	public enum StatusType {
+		STDERR,
+		STDOUT,
+		STDOUT_TABDELIMITED,
+	}
+	
 	Vector<Thread> _threads;
 	String _label;
-	boolean _standardstatus;
+	StatusType _statusType;
 	
 	/**
 	 * The interval for reporting status.
 	 */
 	public static final long sleeptime=10000;
 
-	public StatusThread(Vector<Thread> threads, String label, boolean standardstatus)
+	public StatusThread(Vector<Thread> threads, String label, StatusType statusType)
 	{
 		_threads=threads;
 		_label=label;
-		_standardstatus=standardstatus;
+		_statusType=statusType;
 	}
 
 	/**
@@ -94,25 +101,47 @@ class StatusThread extends Thread
 			
 			DecimalFormat d = new DecimalFormat("#.##");
 			
-			if (totalops==0)
-			{
-				System.err.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+Measurements.getMeasurements().getSummary());
+			if(_statusType.equals(StatusType.STDERR)) {
+				if (totalops==0) {
+					System.err.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+Measurements.getMeasurements().getSummary());
+				}
+				else
+				{
+					System.err.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+d.format(curthroughput)+" current ops/sec; "+Measurements.getMeasurements().getSummary());
+				}
 			}
-			else
+			else if (_statusType.equals(StatusType.STDOUT))
 			{
-				System.err.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+d.format(curthroughput)+" current ops/sec; "+Measurements.getMeasurements().getSummary());
+				if (totalops==0)
+				{
+					System.out.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+Measurements.getMeasurements().getSummary());
+				}
+				else
+				{
+					System.out.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+d.format(curthroughput)+" current ops/sec; "+Measurements.getMeasurements().getSummary());
+				}
 			}
-
-			if (_standardstatus)
-			{
-			if (totalops==0)
-			{
-				System.out.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+Measurements.getMeasurements().getSummary());
-			}
-			else
-			{
-				System.out.println(_label+" "+(interval/1000)+" sec: "+totalops+" operations; "+d.format(curthroughput)+" current ops/sec; "+Measurements.getMeasurements().getSummary());
-			}
+			else if(_statusType.equals(StatusType.STDOUT_TABDELIMITED)) {
+				if (totalops==0)
+				{
+					if(_label != null) 
+					{
+						System.out.println("test\tseconds\toperations\toperations/sec\toperation type");
+						System.out.println(_label+"\t"+(interval/1000)+"\t"+totalops+"\tnone yet\t"+Measurements.getMeasurements().getSummary());
+					} else {
+						System.out.println("seconds\toperations\toperations/sec\toperation type");
+						System.out.println((interval/1000)+"\t"+totalops+"\tnone yet\t"+Measurements.getMeasurements().getSummary());
+					}
+				}
+				else
+				{
+					if(_label != null) 
+					{
+						System.out.println(_label+"\t"+(interval/1000)+"\t"+totalops+"\t"+d.format(curthroughput)+"\t"+Measurements.getMeasurements().getSummary());
+					} else {
+						System.out.println((interval/1000)+"\t"+totalops+"\t"+d.format(curthroughput)+"\t"+Measurements.getMeasurements().getSummary());
+					}
+				}
 			}
 
 			try
@@ -140,7 +169,7 @@ class ClientThread extends Thread
 	static Random random=new Random();
 
 	DB _db;
-	boolean _dotransactions;
+	Client.Operation _operation;
 	Workload _workload;
 	int _opcount;
 	double _target;
@@ -156,7 +185,7 @@ class ClientThread extends Thread
 	 * Constructor.
 	 * 
 	 * @param db the DB implementation to use
-	 * @param dotransactions true to do transactions, false to insert data
+	 * @param operation true to do transactions, false to insert data
 	 * @param workload the workload to use
 	 * @param threadid the id of this thread 
 	 * @param threadcount the total number of threads 
@@ -164,11 +193,11 @@ class ClientThread extends Thread
 	 * @param opcount the number of operations (transactions or inserts) to do
 	 * @param targetperthreadperms target number of operations per thread per ms
 	 */
-	public ClientThread(DB db, boolean dotransactions, Workload workload, int threadid, int threadcount, Properties props, int opcount, double targetperthreadperms)
+	public ClientThread(DB db, Operation operation, Workload workload, int threadid, int threadcount, Properties props, int opcount, double targetperthreadperms)
 	{
 		//TODO: consider removing threadcount and threadid
 		_db=db;
-		_dotransactions=dotransactions;
+		_operation =operation;
 		_workload=workload;
 		_opcount=opcount;
 		_opsdone=0;
@@ -225,7 +254,7 @@ class ClientThread extends Thread
 		
 		try
 		{
-			if (_dotransactions)
+			if (_operation.equals(Client.Operation.IS_TRANSACTION))
 			{
 				long st=System.currentTimeMillis();
 
@@ -238,7 +267,7 @@ class ClientThread extends Thread
 					}
 
 					_opsdone++;
-
+					
 					//throttle the operations
 					if (_target>0)
 					{
@@ -261,7 +290,7 @@ class ClientThread extends Thread
 					}
 				}
 			}
-			else
+			else if(_operation.equals(Client.Operation.IS_INSERTION))
 			{
 				long st=System.currentTimeMillis();
 
@@ -296,6 +325,11 @@ class ClientThread extends Thread
 					}
 				}
 			}
+			else if(_operation.equals(Client.Operation.IS_TRUNCATION)) {
+					if(!_workload.doTruncation(_db)) {
+						throw new Exception("truncation attempt on database failed!");
+					}
+			}
 		}
 		catch (Exception e)
 		{
@@ -328,6 +362,13 @@ public class Client
 	public static final String RECORD_COUNT_PROPERTY="recordcount";
 
 	public static final String WORKLOAD_PROPERTY="workload";
+	
+	public static enum Operation { 
+		IS_NONE,
+		IS_TRANSACTION,
+		IS_INSERTION,
+		IS_TRUNCATION, 
+	}
 	
 	/**
 	 * Indicates how many inserts to do, if less than recordcount. Useful for partitioning
@@ -415,7 +456,10 @@ public class Client
 			double throughput = 1000.0 * ((double) opcount) / ((double) runtime);
 			exporter.write("OVERALL", "Throughput(ops/sec)", throughput);
 
-			Measurements.getMeasurements().exportMeasurements(exporter);
+			// only show measurements if any were requested. 
+			if(opcount != 0) {
+				Measurements.getMeasurements().exportMeasurements(exporter);
+			}
 		} finally
 		{
 			if (exporter != null)
@@ -431,7 +475,7 @@ public class Client
 		String dbname;
 		Properties props=new Properties();
 		Properties fileprops=new Properties();
-		boolean dotransactions=true;
+		Client.Operation operation = Client.Operation.IS_TRANSACTION;
 		int threadcount=1;
 		int target=0;
 		boolean status=false;
@@ -474,12 +518,15 @@ public class Client
 			}
 			else if (args[argindex].compareTo("-load")==0)
 			{
-				dotransactions=false;
+				operation = Client.Operation.IS_INSERTION;
+				argindex++;
+			} else if(args[argindex].compareTo("-truncate") == 0) {
+				operation = Client.Operation.IS_TRUNCATION;
 				argindex++;
 			}
 			else if (args[argindex].compareTo("-t")==0)
 			{
-				dotransactions=true;
+				operation = Client.Operation.IS_TRANSACTION;
 				argindex++;
 			}
 			else if (args[argindex].compareTo("-s")==0)
@@ -681,12 +728,12 @@ public class Client
 
 		System.err.println("Starting test.");
 
-		int opcount;
-		if (dotransactions)
+		int opcount = 0;
+		if (operation.equals(Client.Operation.IS_TRANSACTION))
 		{
 			opcount=Integer.parseInt(props.getProperty(OPERATION_COUNT_PROPERTY,"0"));
 		}
-		else
+		else if(operation.equals(Client.Operation.IS_INSERTION))
 		{
 			if (props.containsKey(INSERT_COUNT_PROPERTY))
 			{
@@ -696,7 +743,7 @@ public class Client
 			{
 				opcount=Integer.parseInt(props.getProperty(RECORD_COUNT_PROPERTY,"0"));
 			}
-		}
+		} 
 
 		Vector<Thread> threads=new Vector<Thread>();
 
@@ -713,7 +760,7 @@ public class Client
 				System.exit(0);
 			}
 
-			Thread t=new ClientThread(db,dotransactions,workload,threadid,threadcount,props,opcount/threadcount,targetperthreadperms);
+			Thread t=new ClientThread(db,operation,workload,threadid,threadcount,props,opcount/threadcount,targetperthreadperms);
 
 			threads.add(t);
 			//t.start();
@@ -723,12 +770,17 @@ public class Client
 
 		if (status)
 		{
-			boolean standardstatus=false;
+			StatusThread.StatusType statusType = StatusThread.StatusType.STDERR;
+			
 			if (props.getProperty("measurementtype","").compareTo("timeseries")==0) 
 			{
-				standardstatus=true;
+				statusType = StatusThread.StatusType.STDOUT;
 			}	
-			statusthread=new StatusThread(threads,label,standardstatus);
+			else if(props.getProperty("measurementtype","").compareTo("tabdelimited") == 0) 
+			{
+				statusType = StatusThread.StatusType.STDOUT_TABDELIMITED;
+			}
+			statusthread=new StatusThread(threads,label,statusType);
 			statusthread.start();
 		}
 
@@ -768,15 +820,15 @@ public class Client
 			System.exit(0);
 		}
 
-		try
-		{
-			exportMeasurements(props, opcount, en - st);
-		} catch (IOException e)
-		{
-			System.err.println("Could not export measurements, error: " + e.getMessage());
-			e.printStackTrace();
-			System.exit(-1);
-		}
+			try
+			{
+				exportMeasurements(props, opcount, en - st);
+			} catch (IOException e)
+			{
+				System.err.println("Could not export measurements, error: " + e.getMessage());
+				e.printStackTrace();
+				System.exit(-1);
+			}
 
 		System.exit(0);
 	}

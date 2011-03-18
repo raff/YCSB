@@ -74,8 +74,12 @@ public class MongoDbClient extends DB {
             if (url.startsWith("mongodb://")) {
                 url = url.substring(10);
             }
-
+            
+	    // need to append db to url.
+            url += "/"+database;
+            System.out.println("new database url = "+url);
             mongo = new Mongo(new DBAddress(url));
+            System.out.println("mongo connection created with "+url);
         } catch (Exception e1) {
             logger.error(
                     "Could not initialize MongoDB connection pool for Loader: "
@@ -150,10 +154,12 @@ public class MongoDbClient extends DB {
             // determine if record was inserted, does not seem to return
             // n=<records affected> for insert
             DBObject errors = db.getLastError();
-
-            return (Boolean) errors.get("ok") && errors.get("err") == null ? 0
+            
+          
+            return ((Double) errors.get("ok")  == 1.0) && errors.get("err") == null ? 0
                     : 1;
         } catch (Exception e) {
+        	System.out.println(e.toString());
             logger.error(e + "", e);
             return 1;
         } finally {
@@ -310,6 +316,33 @@ public class MongoDbClient extends DB {
 	}
 	
     }
+
+	@Override
+	public int truncate(String table) {
+		com.mongodb.DB db = null;
+        try {
+            db = mongo.getDB(database);
+
+            db.requestStart();
+
+            DBCollection collection = db.getCollection(table);
+            collection.drop();
+                        
+          
+            return 0;
+        } catch (Exception e) {
+        	System.out.println(e.toString());
+            logger.error(e + "", e);
+            return 1;
+        } finally {
+	   if (db!=null)
+	   {
+	      db.requestDone();
+	   }
+        }
+	}
+
+	
 
 }
 
