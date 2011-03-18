@@ -16,7 +16,7 @@ import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
 
 import javax.jcr.*;
-import org.apache.jackrabbit.rmi.client.ClientRepositoryFactory;
+import org.apache.jackrabbit.commons.JcrUtils;
 
 /**
 * JCR client for YCSB framework.
@@ -41,14 +41,13 @@ public class JCRClient extends DB {
     public void init() throws DBException {
         // initialize JCR driver
         Properties props = getProperties();
-        String url = props.getProperty("jcr.url", "rmi://localhost:1234/crx");
-        String workspace = props.getProperty("jcr.workspace", "crx.default");
+        String url = props.getProperty("jcr.url", "http://localhost:8080/rmi");
+        String workspace = props.getProperty("jcr.workspace", "default");
 	String username = props.getProperty("jcr.username", "admin");
 	String password = props.getProperty("jcr.password", "admin");
         String database = props.getProperty("jcr.database", "ycsb");
 
 	writeCommit = getBooleanProperty(props, "jcr.writeCommit", true);
-	boolean cleanup = getBooleanProperty(props, "jcr.cleanup", false);
 	boolean verbose = getBooleanProperty(props, "jcr.properties", false);
 
 	if (verbose) {
@@ -60,27 +59,21 @@ public class JCRClient extends DB {
 	    System.out.println("  jcr.password:    " + password);
 	    System.out.println("  jcr.database:    " + database);
 	    System.out.println("  jcr.writeCommit: " + writeCommit);
-	    System.out.println("  jcr.cleanup:     " + cleanup);
 	    System.out.println("");
+	    System.out.println("For CRX use:");
+            System.out.println("  jcr.url:         rmi://localhost:1234/crx");
+            System.out.println("  jcr.workspace:   crx.default");
 	}
 
         try {
-	    ClientRepositoryFactory factory = new ClientRepositoryFactory();
-	    Repository repository = factory.getRepository(url);
+		
+	    Repository repository = JcrUtils.getRepository(url);
 	    session = repository.login(
 		new SimpleCredentials(username,password.toCharArray()), workspace);
 
 	    Node root = session.getRootNode();
 	    if (root.hasNode(database)) {
 		dbNode = root.getNode(database);
-		if (cleanup) {
-			if (verbose) System.out.println("cleaning database...");
-			dbNode.remove();
-			dbNode = root.addNode(database);
-			if (verbose) System.out.println("saving...");
-			session.save();
-			if (verbose) System.out.println("done.");
-		}
 	    } else {
 		dbNode = root.addNode(database);
 		session.save();
@@ -144,6 +137,28 @@ public class JCRClient extends DB {
 
     public void commit() throws Exception {
 	if (writeCommit) session.save();
+    }
+
+    @Override
+    /**
+     * Delete database table
+     *
+     * @param table The name of the table
+     */
+    public int truncate(String table) {
+
+	    try {
+		if (dbNode.hasNode(table)) {
+		    Node tableNode = dbNode.getNode(table);
+		    tableNode.remove();
+		    session.save();
+		}
+
+		return 0;
+	    } catch(Exception e) {
+                logger.error(e + "", e);
+                return 1;
+	    }
     }
 
     @Override
