@@ -387,6 +387,7 @@ public class Client
 				"             be specified as the \"target\" property using -p");
 		System.out.println("  -load:  run the loading phase of the workload");
 		System.out.println("  -t:  run the transactions phase of the workload (default)");
+		System.out.println("  -truncate: run the truncation phase of the workload (delete table)");
 		System.out.println("  -db dbname: specify the name of the DB to use (default: com.yahoo.ycsb.BasicDB) - \n" +
 				"              can also be specified as the \"db\" property using -p");
 		System.out.println("  -P propertyfile: load properties from the given file. Multiple files can");
