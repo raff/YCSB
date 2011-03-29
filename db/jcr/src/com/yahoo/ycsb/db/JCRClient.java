@@ -29,10 +29,13 @@ import org.apache.jackrabbit.commons.JcrUtils;
 public class JCRClient extends DB {
 
     private static final Logger logger = LoggerFactory.getLogger(JCRClient.class);
+    private static final int MODULE = 1024;
 
     private Session session;
     private Node dbNode;
     private boolean writeCommit;
+    private boolean hashKeys;
+
 
     /**
      * Initialize any state for this DB. Called once per DB instance; there is
@@ -48,21 +51,24 @@ public class JCRClient extends DB {
         String database = props.getProperty("jcr.database", "ycsb");
 
 	writeCommit = getBooleanProperty(props, "jcr.writeCommit", true);
+	hashKeys = getBooleanProperty(props, "jcr.hashKeys", false);
 	boolean verbose = getBooleanProperty(props, "jcr.properties", false);
 
 	if (verbose) {
 	    System.out.println("");
-	    System.out.println("JCR driver properties:");
-	    System.out.println("  jcr.url:         " + url);
-	    System.out.println("  jcr.workspace:   " + workspace);
-	    System.out.println("  jcr.username:    " + username);
-	    System.out.println("  jcr.password:    " + password);
-	    System.out.println("  jcr.database:    " + database);
-	    System.out.println("  jcr.writeCommit: " + writeCommit);
-	    System.out.println("");
-	    System.out.println("For CRX use:");
-            System.out.println("  jcr.url:         rmi://localhost:1234/crx");
-            System.out.println("  jcr.workspace:   crx.default");
+	    System.out.println("# JCR driver properties:");
+	    System.out.println("  jcr.url=" + url);
+	    System.out.println("  jcr.workspace=" + workspace);
+	    System.out.println("  jcr.username=" + username);
+	    System.out.println("  jcr.password=" + password);
+	    System.out.println("  jcr.database=" + database);
+	    System.out.println("  jcr.writeCommit=" + writeCommit);
+	    System.out.println("  jcr.hashKeys=" + hashKeys);
+	    System.out.println();
+	    System.out.println("# For CRX use:");
+            System.out.println("  jcr.url=rmi://localhost:1234/crx");
+            System.out.println("  jcr.workspace=crx.default");
+	    System.out.println();
 	}
 
         try {
@@ -135,6 +141,23 @@ public class JCRClient extends DB {
 	return tableNode;
     }
 
+    /**
+     * Utility method to return a "hashed" key
+     */
+    public String getHashKey(Node tableNode, String key) throws Exception {
+	if (hashKeys) {
+	    String hash = String.format("%03x", 
+		(key.hashCode() % MODULE) & (MODULE-1));
+
+	    if (tableNode != null && ! tableNode.hasNode(hash))
+	    	tableNode.addNode(hash);
+
+	    return hash + "/" + key;
+	} else {
+	    return key;
+	}
+    }
+
     public void commit() throws Exception {
 	if (writeCommit) session.save();
     }
@@ -174,6 +197,7 @@ public class JCRClient extends DB {
        
         try {
 	    Node tableNode = getTableNode(table);
+	    key = getHashKey(null, key);
 
 	    if (tableNode.hasNode(key)) {
 		Node n = tableNode.getNode(key);
@@ -206,6 +230,8 @@ public class JCRClient extends DB {
     public int insert(String table, String key, HashMap<String, String> values) {
         try {
 	    Node tableNode = getTableNode(table);
+	    key = getHashKey(tableNode, key);
+
 	    if (tableNode.hasNode(key))
 		return 1; // record already exists
 
@@ -240,7 +266,7 @@ public class JCRClient extends DB {
         
         try {
 	    Node tableNode = getTableNode(table);
-	    Node n = tableNode.getNode(key);
+	    Node n = tableNode.getNode(getHashKey(null, key));
 
 	    if (fields == null) {
 		// return all properties
@@ -282,6 +308,8 @@ public class JCRClient extends DB {
      
         try {
 	    Node tableNode = getTableNode(table);
+	    key = getHashKey(null, key);
+
 	    if (!tableNode.hasNode(key))
 		return 1; // record doesn't exists
 
