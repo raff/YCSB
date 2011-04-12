@@ -44,6 +44,9 @@ doc/index.html file.
 Revision History
 ================
 
+0.1.5 - 04/12/11
+- Redis binding (raff)
+
 0.1.4 - 03/17/11
 - JCR (jackrabbit or CRX) binding (raff)
 
